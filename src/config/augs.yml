@@ -1,0 +1,21 @@
+
+
+mel_augmentation:
+
+  time_masking:
+    enabled: true
+    max_length: 20
+    max_masks: 2
+    p: 0.5
+
+  freq_masking:
+    enabled: true
+    max_length: 10
+    max_masks: 2
+    p: 0.5
+
+  normalization:
+    enabled: true
+    eps: 1e-6
+    standard: true
+    minmax: false

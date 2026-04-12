@@ -1,0 +1,181 @@
+import math
+import numpy as np
+import torch
+from torchaudio.functional import amplitude_to_DB
+from torchaudio.transforms import FrequencyMasking, TimeMasking
+from typing import Optional
+
+
+class NormalizeMelSpec(torch.nn.Module):
+
+    def __init__(
+            self,
+            eps: float = 1e-6,
+            normalize_standart: bool = True,
+            normalize_minmax: bool = True,
+    ) -> None:
+        super().__init__()
+        self.eps = eps
+        self.normalize_standart = normalize_standart
+        self.normalize_minmax = normalize_minmax
+
+    def forward(self, X: torch.Tensor) -> torch.Tensor:
+        if self.normalize_standart:
+            mean = X.mean((-2, -1), keepdim=True)
+            std = X.std((-2, -1), keepdim=True)
+            X = (X - mean) / (std + self.eps)
+
+        if self.normalize_minmax:
+            norm_max = torch.amax(X, dim=(-2, -1), keepdim=True)
+            norm_min = torch.amin(X, dim=(-2, -1), keepdim=True)
+            X = (X - norm_min) / (norm_max - norm_min + self.eps)
+
+        return X
+
+
+class CustomMasking(torch.nn.Module):
+
+    def __init__(
+            self,
+            mask_max_length: int,
+            mask_max_masks: int,
+            p: float = 1.0,
+            inplace: bool = True,
+    ) -> None:
+        super().__init__()
+        assert isinstance(mask_max_masks, int) and mask_max_masks > 0
+        self.mask_max_length = mask_max_length
+        self.mask_max_masks = mask_max_masks
+        self.mask_module = None
+        self.p = p
+        self.inplace = inplace
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if not self.inplace:
+            output = x.clone()
+        else:
+            output = x
+
+        for i in range(x.shape[0]):
+            if np.random.binomial(n=1, p=self.p):
+                n_applies = np.random.randint(low=1, high=self.mask_max_masks + 1)
+
+                for _ in range(n_applies):
+                    if self.inplace:
+                        x[i:i + 1] = self.mask_module(x[i:i + 1])
+                    else:
+                        output[i:i + 1] = self.mask_module(output[i:i + 1])
+
+        return output
+
+
+class CustomTimeMasking(CustomMasking):
+
+    def __init__(
+            self,
+            mask_max_length: int,
+            mask_max_masks: int,
+            p: float = 1.0,
+            inplace: bool = True,
+    ) -> None:
+        super().__init__(
+            mask_max_length=mask_max_length,
+            mask_max_masks=mask_max_masks,
+            p=p,
+            inplace=inplace,
+        )
+
+        self.mask_module = TimeMasking(time_mask_param=mask_max_length)
+
+
+class CustomFreqMasking(CustomMasking):
+
+    def __init__(
+            self,
+            mask_max_length: int,
+            mask_max_masks: int,
+            p: float = 1.0,
+            inplace: bool = True,
+    ) -> None:
+        super().__init__(
+            mask_max_length=mask_max_length,
+            mask_max_masks=mask_max_masks,
+            p=p,
+            inplace=inplace,
+        )
+
+        self.mask_module = FrequencyMasking(freq_mask_param=mask_max_length)
+
+
+class ChannelAgnosticAmplitudeToDB(torch.nn.Module):
+
+    def __init__(
+            self,
+            stype: str = "power",
+            top_db: Optional[float] = None,
+    ) -> None:
+        super().__init__()
+
+        self.stype = stype
+
+        if top_db is not None and top_db < 0:
+            raise ValueError("top_db must be positive value")
+
+        self.top_db = top_db
+        self.multiplier = 10.0 if stype == "power" else 20.0
+        self.amin = 1e-10
+        self.ref_value = 1.0
+        self.db_multiplier = math.log10(max(self.amin, self.ref_value))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        assert x.dim() in [3, 4]
+
+        add_fake_channel = False
+
+        if x.dim() == 3:
+            x = x.unsqueeze(1)
+            add_fake_channel = True
+
+        x_db = amplitude_to_DB(
+            x,
+            self.multiplier,
+            self.amin,
+            self.db_multiplier,
+            self.top_db,
+        )
+
+        if add_fake_channel:
+            x_db = x_db.squeeze(1)
+
+        return x_db
+
+
+def get_mel_augmentations(
+        time_mask_max_length: int,
+        time_mask_max_masks: int,
+        time_mask_p: float,
+        freq_mask_max_length: int,
+        freq_mask_max_masks: int,
+        freq_mask_p: float,
+        normalize_standart: bool,
+        normalize_minmax: bool,
+        eps: float = 1e-6,
+) -> torch.nn.Sequential:
+
+    return torch.nn.Sequential(
+        CustomTimeMasking(
+            mask_max_length=time_mask_max_length,
+            mask_max_masks=time_mask_max_masks,
+            p=time_mask_p,
+        ),
+        CustomFreqMasking(
+            mask_max_length=freq_mask_max_length,
+            mask_max_masks=freq_mask_max_masks,
+            p=freq_mask_p,
+        ),
+        NormalizeMelSpec(
+            eps=eps,
+            normalize_standart=normalize_standart,
+            normalize_minmax=normalize_minmax,
+        ),
+    )

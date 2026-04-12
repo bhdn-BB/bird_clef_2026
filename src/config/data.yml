@@ -1,0 +1,18 @@
+
+data:
+
+  cleaned_df_path: "/kaggle/input/competitions/birdclef-2026/train.csv"
+  soundscapes_df_path: "/kaggle/input/competitions/birdclef-2026/train_soundscapes_labels.csv"
+  taxonomy_df_path: "/kaggle/input/competitions/birdclef-2026/taxonomy.csv"
+
+  cleaned_audio_dir: "/kaggle/input/competitions/birdclef-2026/train_audio"
+  soundscapes_audio_dir: "/kaggle/input/competitions/birdclef-2026/test_soundscapes"
+
+  filepath_col: "filepath"
+  target_col: "primary_label"
+
+  cache_dir: "/kaggle/working/cache/mel"
+  sample_rate: 32000
+  duration: 3.0
+
+  num_workers: 0
