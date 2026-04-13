@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
@@ -27,9 +28,16 @@ class BirdSoundClassifier(pl.LightningModule):
             in_chans=1,
         )
 
-        if checkpoint_path is not None:
-            ckpt = torch.load(checkpoint_path, map_location="cpu")
-            self.model.load_state_dict(ckpt["state_dict"])
+
+        if checkpoint_path:
+            if os.path.exists(checkpoint_path):
+                ckpt = torch.load(checkpoint_path, map_location="cpu")
+                state_dict = ckpt.get("state_dict", ckpt)
+                self.model.load_state_dict(state_dict, strict=False)
+            else:
+                print(f"Checkpoint not found: {checkpoint_path} - training from scratch")
+        else:
+            print("No checkpoint provided - training from scratch")
 
         self.loss_fn = loss_fn
 
@@ -51,16 +59,22 @@ class BirdSoundClassifier(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
+
         loss = self.loss_fn(logits, y.float())
-        self.train_auroc.update(torch.sigmoid(logits), y.int())
+
+        self.train_auroc.update(torch.sigmoid(logits), y.long())
+
         self.log("train_loss", loss, prog_bar=True, on_epoch=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
+
         loss = self.loss_fn(logits, y.float())
-        self.val_auroc.update(torch.sigmoid(logits), y.int())
+
+        self.val_auroc.update(torch.sigmoid(logits), y.long())
+
         self.log("val_loss", loss, prog_bar=True, on_epoch=True)
         return loss
 
@@ -73,12 +87,16 @@ class BirdSoundClassifier(pl.LightningModule):
         self.val_auroc.reset()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.lr)
+        optimizer = torch.optim.AdamW(
+            self.parameters(),
+            lr=self.hparams.lr
+        )
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
             T_max=self.trainer.max_epochs,
         )
+
         return {
             "optimizer": optimizer,
             "lr_scheduler": {
@@ -86,4 +104,3 @@ class BirdSoundClassifier(pl.LightningModule):
                 "interval": "epoch",
             },
         }
-

@@ -5,9 +5,7 @@ import librosa
 import pandas as pd
 
 from tqdm import tqdm
-
-
-tqdm.pandas()
+from joblib import Parallel, delayed
 
 
 def get_label2id(taxonomy_df: pd.DataFrame, label_col: str) -> Dict[str, int]:
@@ -16,21 +14,34 @@ def get_label2id(taxonomy_df: pd.DataFrame, label_col: str) -> Dict[str, int]:
         for idx, label in enumerate(taxonomy_df[label_col].tolist())
     }
 
+
+def get_duration(path: str) -> float:
+    """Get duration of audio file."""
+    try:
+        return librosa.get_duration(path=path)
+    except Exception as e:
+        print(f"Error loading {path}: {e}")
+        return 0.0
+
+
 def merge_dataframes(
         cleaned_df: pd.DataFrame,
         soundscapes_df: pd.DataFrame,
         cleaned_audio_dir: str,
         soundscapes_audio_dir: str,
+        n_workers: int = 4,
 ) -> pd.DataFrame:
-
     cleaned_df['filepath'] = cleaned_df['filename'].apply(
         lambda path: os.path.join(cleaned_audio_dir, path)
     )
     cleaned_df.drop(columns=['filename'], inplace=True)
     cleaned_df['start'] = 0.0
-    cleaned_df['end'] = cleaned_df['filepath'].progress_apply(
-        lambda path: librosa.get_duration(path=path)
+
+    durations = Parallel(n_jobs=n_workers)(
+        delayed(get_duration)(path)
+        for path in tqdm(cleaned_df['filepath'], desc="Getting durations", unit=" files")
     )
+    cleaned_df['end'] = durations
     cleaned_df = cleaned_df[['primary_label', 'start', 'end', 'filepath']]
 
     soundscapes_df['filepath'] = soundscapes_df['filename'].apply(
@@ -42,18 +53,18 @@ def merge_dataframes(
     combined_df = pd.concat([cleaned_df, soundscapes_df], ignore_index=True)
     return combined_df
 
-def split_audio_samples(combined_df: pd.DataFrame, max_duration: float) -> pd.DataFrame:
 
+def split_audio_samples(combined_df: pd.DataFrame, max_duration: float) -> pd.DataFrame:
     new_rows = []
 
     combined_df_loader = tqdm(
         combined_df.iterrows(),
         total=len(combined_df),
-        desc="Splitting audio samples"
+        desc="Splitting audio samples",
+        unit=" samples"
     )
 
     for _, row in combined_df_loader:
-
         start = row['start']
         end = row['end']
 
@@ -67,4 +78,3 @@ def split_audio_samples(combined_df: pd.DataFrame, max_duration: float) -> pd.Da
 
     split_df = pd.DataFrame(new_rows).reset_index(drop=True)
     return split_df
-

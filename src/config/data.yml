@@ -6,7 +6,7 @@ data:
   taxonomy_df_path: "/kaggle/input/competitions/birdclef-2026/taxonomy.csv"
 
   cleaned_audio_dir: "/kaggle/input/competitions/birdclef-2026/train_audio"
-  soundscapes_audio_dir: "/kaggle/input/competitions/birdclef-2026/test_soundscapes"
+  soundscapes_audio_dir: "/kaggle/input/competitions/birdclef-2026/train_soundscapes"
 
   filepath_col: "filepath"
   target_col: "primary_label"

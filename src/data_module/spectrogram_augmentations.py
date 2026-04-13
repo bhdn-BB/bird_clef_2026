@@ -15,7 +15,7 @@ class NormalizeMelSpec(torch.nn.Module):
             normalize_minmax: bool = True,
     ) -> None:
         super().__init__()
-        self.eps = eps
+        self.eps = float(eps)
         self.normalize_standart = normalize_standart
         self.normalize_minmax = normalize_minmax
 

@@ -1,5 +1,4 @@
 import os
-import torch
 import pytorch_lightning as pl
 import pandas as pd
 import wandb
@@ -10,15 +9,13 @@ from sklearn.model_selection import train_test_split
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
-from src.utils.config_loader import load_yaml
-from src.utils.pandas_transformations import merge_dataframes, get_label2id, split_audio_samples
-
 from src.data_module.dataset import AudioDataset
-from src.data_module.wave_features_extractor import WaveFeaturesExtractor
 from src.data_module.spectrogram_augmentations import get_mel_augmentations
-
-from src.models.model_baseline import BirdSoundClassifier
+from src.data_module.wave_features_extractor import WaveFeaturesExtractor
 from src.losses.focal import FocalLoss
+from src.models.model_baseline import BirdSoundClassifier
+from src.utils.config_loader import load_yaml
+from src.utils.pandas_transformations import get_label2id, merge_dataframes, split_audio_samples
 
 
 def run_training(
@@ -47,12 +44,10 @@ def run_training(
         sound,
         data_cfg["cleaned_audio_dir"],
         data_cfg["soundscapes_audio_dir"],
+        n_workers=train_cfg.get("pandas_n_workers", 4),
     )
 
-    df = split_audio_samples(
-        combined_df=df,
-        max_duration=data_cfg["duration"],
-    )
+    df = split_audio_samples(df, max_duration=data_cfg["duration"])
 
     train_df, val_df = train_test_split(
         df,
@@ -124,16 +119,18 @@ def run_training(
         backbone_name=train_cfg["backbone_name"],
         lr=train_cfg["lr"],
         loss_fn=FocalLoss(),
-        checkpoint_path=train_cfg["checkpoint_path"],
+        checkpoint_path=train_cfg.get("checkpoint_path"),
     )
 
-    os.makedirs(train_cfg["checkpoint_path"], exist_ok=True)
+    checkpoint_dir = train_cfg.get("checkpoint_path") or "./checkpoints"
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
     checkpoint_callback = ModelCheckpoint(
-        dirpath=train_cfg["checkpoint_path"],
+        dirpath=checkpoint_dir,
         monitor="val_auroc",
         mode="max",
         save_top_k=1,
+        save_last=False,
         filename="best-{epoch}-{val_auroc:.4f}",
     )
 
@@ -145,14 +142,15 @@ def run_training(
 
     wandb_logger = None
 
-    if wandb_project is not None:
-        if wandb_api_key is not None:
-            os.environ["WANDB_API_KEY"] = wandb_api_key
+    if wandb_project:
+        if wandb_api_key:
+            wandb.login(key=wandb_api_key)
 
         wandb_logger = WandbLogger(
             project=wandb_project,
             entity=wandb_entity,
-            log_model=True,
+            log_model=False,
+            name=train_cfg.get("exp_name", "bird_exp"),
         )
 
     trainer = pl.Trainer(
@@ -169,15 +167,15 @@ def run_training(
 
     trainer.fit(model, train_loader, val_loader)
 
-    if wandb_logger is not None:
+    if wandb_logger:
         best_path = checkpoint_callback.best_model_path
 
-        artifact = wandb.Artifact(
-            name="best-model",
-            type="model"
-        )
-        artifact.add_file(best_path)
-        wandb_logger.experiment.log_artifact(artifact)
-        wandb_logger.experiment.finish()
+        if best_path and os.path.exists(best_path):
+            artifact = wandb.Artifact("best-model", type="model")
+            artifact.add_file(best_path)
+            wandb_logger.experiment.log_artifact(artifact)
+
+        wandb.finish()
 
     return model, trainer, checkpoint_callback
+
