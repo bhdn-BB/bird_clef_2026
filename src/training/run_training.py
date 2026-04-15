@@ -12,16 +12,19 @@ from pytorch_lightning.loggers import WandbLogger
 from src.data_module.dataset import AudioDataset
 from src.data_module.spectrogram_augmentations import get_mel_augmentations
 from src.data_module.wave_features_extractor import WaveFeaturesExtractor
+
 from src.losses.focal import FocalLoss
 from src.models.model_baseline import BirdSoundClassifier
 from src.utils.config_loader import load_yaml
 from src.utils.pandas_transformations import get_label2id, merge_dataframes, split_audio_samples
+from src.utils.run_mel_caching import build_mel_cache
 
 
 def run_training(
     data_cfg_path: str,
     train_cfg_path: str,
     aug_cfg_path: str,
+    cache_dir: str = None,
     wandb_api_key: str = None,
     wandb_project: str = None,
     wandb_entity: str = None,
@@ -67,6 +70,21 @@ def run_training(
         db_delta=mel_cfg["db_delta"],
     )
 
+    if cache_dir is None:
+        cache_dir = data_cfg["cache_dir"]
+
+    if not os.path.exists(cache_dir) or len(os.listdir(cache_dir)) == 0:
+        print("[Cache] Not found → building...")
+        build_mel_cache(
+            df,
+            filepath_col=data_cfg["filepath_col"],
+            cache_dir=cache_dir,
+            feature_extractor=feature_extractor,
+            duration=data_cfg["duration"],
+        )
+    else:
+        print("[Cache] Using existing cache")
+
     mel_aug = get_mel_augmentations(
         time_mask_max_length=aug_cfg["time_masking"]["max_length"],
         time_mask_max_masks=aug_cfg["time_masking"]["max_masks"],
@@ -84,9 +102,8 @@ def run_training(
         filepath_col=data_cfg["filepath_col"],
         target_col=data_cfg["target_col"],
         label2id=label2id,
-        feature_extractor=feature_extractor,
+        cache_dir=cache_dir,
         spectrogram_transform=mel_aug,
-        cache_dir=data_cfg["cache_dir"],
     )
 
     val_ds = AudioDataset(
@@ -94,8 +111,7 @@ def run_training(
         filepath_col=data_cfg["filepath_col"],
         target_col=data_cfg["target_col"],
         label2id=label2id,
-        feature_extractor=feature_extractor,
-        cache_dir=data_cfg["cache_dir"],
+        cache_dir=cache_dir,
     )
 
     train_loader = DataLoader(
@@ -123,6 +139,7 @@ def run_training(
     )
 
     checkpoint_dir = train_cfg.get("checkpoint_path") or "./checkpoints"
+
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     checkpoint_callback = ModelCheckpoint(
@@ -130,7 +147,6 @@ def run_training(
         monitor="val_auroc",
         mode="max",
         save_top_k=1,
-        save_last=False,
         filename="best-{epoch}-{val_auroc:.4f}",
     )
 
@@ -149,7 +165,6 @@ def run_training(
         wandb_logger = WandbLogger(
             project=wandb_project,
             entity=wandb_entity,
-            log_model=False,
             name=train_cfg.get("exp_name", "bird_exp"),
         )
 
@@ -168,13 +183,6 @@ def run_training(
     trainer.fit(model, train_loader, val_loader)
 
     if wandb_logger:
-        best_path = checkpoint_callback.best_model_path
-
-        if best_path and os.path.exists(best_path):
-            artifact = wandb.Artifact("best-model", type="model")
-            artifact.add_file(best_path)
-            wandb_logger.experiment.log_artifact(artifact)
-
         wandb.finish()
 
     return model, trainer, checkpoint_callback

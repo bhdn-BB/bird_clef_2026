@@ -11,7 +11,7 @@ data:
   filepath_col: "filepath"
   target_col: "primary_label"
 
-  cache_dir: "/kaggle/working/cache/mel"
+  cache_dir: "/kaggle/input/datasets/bohdanbb2000/mel-specs-001/mel_caching_dir"
   sample_rate: 32000
   duration: 3.0
 
