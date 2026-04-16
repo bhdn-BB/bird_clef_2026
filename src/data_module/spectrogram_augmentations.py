@@ -1,9 +1,6 @@
-import math
 import numpy as np
 import torch
-from torchaudio.functional import amplitude_to_DB
 from torchaudio.transforms import FrequencyMasking, TimeMasking
-from typing import Optional
 
 
 class NormalizeMelSpec(torch.nn.Module):

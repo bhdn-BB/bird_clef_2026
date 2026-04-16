@@ -22,18 +22,21 @@ from src.utils.run_mel_caching import build_mel_cache
 
 
 def run_training(
-    data_cfg_path: str,
-    train_cfg_path: str,
-    aug_cfg_path: str,
-    cache_dir: str = None,
-    wandb_api_key: str = None,
-    wandb_project: str = None,
-    wandb_entity: str = None,
+        data_cfg_path: str,
+        train_cfg_path: str,
+        aug_cfg_path: str,
+        cache_dir: str = None,
+        wandb_api_key: str = None,
+        wandb_project: str = None,
+        wandb_entity: str = None,
 ):
-
     data_cfg = load_yaml(data_cfg_path)["data"]
     train_cfg = load_yaml(train_cfg_path)["train"]
-    aug_cfg = load_yaml(aug_cfg_path)["mel_augmentation"]
+
+    # Завантажуємо конфіг і строго витягуємо потрібні блоки
+    full_aug_cfg = load_yaml(aug_cfg_path)
+    mel_aug_cfg = full_aug_cfg["mel_augmentation"]
+    mixup_cfg = full_aug_cfg["mixup"]  # Якщо блоку mixup немає, отримаємо KeyError
 
     pl.seed_everything(train_cfg["seed"], workers=True)
 
@@ -86,16 +89,20 @@ def run_training(
         print("[Cache] using existing cache")
 
     mel_aug = get_mel_augmentations(
-        time_mask_max_length=aug_cfg["time_masking"]["max_length"],
-        time_mask_max_masks=aug_cfg["time_masking"]["max_masks"],
-        time_mask_p=aug_cfg["time_masking"]["p"],
-        freq_mask_max_length=aug_cfg["freq_masking"]["max_length"],
-        freq_mask_max_masks=aug_cfg["freq_masking"]["max_masks"],
-        freq_mask_p=aug_cfg["freq_masking"]["p"],
-        normalize_standard=aug_cfg["normalization"]["standard"],
-        normalize_minmax=aug_cfg["normalization"]["minmax"],
-        eps=aug_cfg["normalization"]["eps"],
+        time_mask_max_length=mel_aug_cfg["time_masking"]["max_length"],
+        time_mask_max_masks=mel_aug_cfg["time_masking"]["max_masks"],
+        time_mask_p=mel_aug_cfg["time_masking"]["p"] if mel_aug_cfg["time_masking"]["enabled"] else 0.0,
+        freq_mask_max_length=mel_aug_cfg["freq_masking"]["max_length"],
+        freq_mask_max_masks=mel_aug_cfg["freq_masking"]["max_masks"],
+        freq_mask_p=mel_aug_cfg["freq_masking"]["p"] if mel_aug_cfg["freq_masking"]["enabled"] else 0.0,
+        normalize_standard=mel_aug_cfg["normalization"]["standard"],
+        normalize_minmax=mel_aug_cfg["normalization"]["minmax"],
+        eps=float(mel_aug_cfg["normalization"]["eps"]),
     )
+
+    # Строгий доступ до параметрів Mixup
+    mixup_p = mixup_cfg["p"] if mixup_cfg["enabled"] else 0.0
+    mixup_alpha = mixup_cfg["alpha"]
 
     train_ds = AudioDataset(
         df=train_df,
@@ -104,6 +111,9 @@ def run_training(
         label2id=label2id,
         cache_dir=cache_dir,
         spectrogram_transform=mel_aug,
+        mixup_p=mixup_p,
+        mixup_alpha=mixup_alpha,
+        is_train=True,
     )
 
     val_ds = AudioDataset(
@@ -113,6 +123,8 @@ def run_training(
         label2id=label2id,
         cache_dir=cache_dir,
         spectrogram_transform=None,
+        mixup_p=0.0,
+        is_train=False,
     )
 
     train_loader = DataLoader(

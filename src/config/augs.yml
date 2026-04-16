@@ -1,7 +1,4 @@
-
-
 mel_augmentation:
-
   time_masking:
     enabled: true
     max_length: 12
@@ -16,7 +13,11 @@ mel_augmentation:
 
   normalization:
     enabled: true
-    eps: 1e-5
-
+    eps: 1e-05
     standard: true
     minmax: false
+
+mixup:
+  enabled: true
+  p: 0.5
+  alpha: 0.4

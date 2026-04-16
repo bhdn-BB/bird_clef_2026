@@ -1,11 +1,11 @@
-import torch
-from torch.utils.data import Dataset
-import pandas as pd
 import os
+import torch
+import numpy as np
+import pandas as pd
+from torch.utils.data import Dataset
 
 
 class AudioDataset(Dataset):
-
     def __init__(
         self,
         df: pd.DataFrame,
@@ -14,7 +14,9 @@ class AudioDataset(Dataset):
         label2id: dict,
         cache_dir: str,
         spectrogram_transform=None,
-        is_test: bool = False,
+        mixup_p: float = 0.0,
+        mixup_alpha: float = 0.4,
+        is_train: bool = True,
     ):
         self.df = df.reset_index(drop=True)
         self.filepath_col = filepath_col
@@ -22,34 +24,28 @@ class AudioDataset(Dataset):
         self.label2id = label2id
         self.num_classes = len(label2id)
         self.cache_dir = cache_dir
-        self.spectrogram_transform = spectrogram_transform
-        self.is_test = is_test
+        self.transform = spectrogram_transform
 
-    def __len__(self):
+        self.mixup_p = mixup_p
+        self.mixup_alpha = mixup_alpha
+        self.is_train = is_train
+
+    def __len__(self) -> int:
         return len(self.df)
 
-    def __getitem__(self, idx):
+    def _get_sample(self, idx: int):
         row = self.df.iloc[idx]
         filepath = row[self.filepath_col]
-
-        filename = os.path.basename(filepath)
-        cache_path = os.path.join(self.cache_dir, f"{filename}.pt")
-
-        if not os.path.exists(cache_path):
+        start_sec = float(row.get("start", 0.0))
+        cache_filename = f"{os.path.basename(filepath)}_{start_sec:.2f}.pt"
+        cache_path = os.path.join(self.cache_dir, cache_filename)
+        try:
+            mel = torch.load(cache_path, map_location="cpu", weights_only=True).float()
+        except FileNotFoundError:
             raise RuntimeError(f"Cache missing: {cache_path}")
 
-        mel = torch.load(cache_path, map_location="cpu")
-
-        if mel.dim() == 2:
-            mel = mel.unsqueeze(0)
-
-        mel = mel.float()
-
-        if self.spectrogram_transform is not None:
-            mel = self.spectrogram_transform(mel)
-
-        if self.is_test:
-            return mel
+        if self.transform:
+            mel = self.transform(mel)
 
         target = torch.zeros(self.num_classes, dtype=torch.float32)
 
@@ -60,3 +56,20 @@ class AudioDataset(Dataset):
                 target[self.label2id[label]] = 1.0
 
         return mel, target
+
+    def _apply_mixup(self, mel: torch.Tensor, target: torch.Tensor):
+        if np.random.rand() >= self.mixup_p:
+            return mel, target
+        mix_idx = np.random.randint(0, len(self.df))
+        mix_mel, mix_target = self._get_sample(mix_idx)
+        lam = np.random.beta(self.mixup_alpha, self.mixup_alpha)
+        mixed_mel = lam * mel + (1.0 - lam) * mix_mel
+        mixed_target = lam * target + (1.0 - lam) * mix_target
+        return mixed_mel, mixed_target
+
+    def __getitem__(self, idx: int):
+        mel, target = self._get_sample(idx)
+        if self.is_train and self.mixup_p > 0:
+            mel, target = self._apply_mixup(mel, target)
+        return mel, target
+
