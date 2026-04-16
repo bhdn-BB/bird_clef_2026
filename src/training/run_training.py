@@ -15,6 +15,7 @@ from src.data_module.wave_features_extractor import WaveFeaturesExtractor
 
 from src.losses.focal import FocalLoss
 from src.models.model_baseline import BirdSoundClassifier
+
 from src.utils.config_loader import load_yaml
 from src.utils.pandas_transformations import get_label2id, merge_dataframes, split_audio_samples
 from src.utils.run_mel_caching import build_mel_cache
@@ -65,16 +66,15 @@ def run_training(
         n_mels=mel_cfg["n_mels"],
         hop_length=mel_cfg["hop_length"],
         n_fft=mel_cfg["n_fft"],
-        freq_min=mel_cfg["freq_min"],
-        freq_max=mel_cfg["freq_max"],
-        db_delta=mel_cfg["db_delta"],
+        fmin=mel_cfg["freq_min"],
+        fmax=mel_cfg["freq_max"],
     )
 
     if cache_dir is None:
         cache_dir = data_cfg["cache_dir"]
 
     if not os.path.exists(cache_dir) or len(os.listdir(cache_dir)) == 0:
-        print("[Cache] Not found → building...")
+        print("[Cache] building...")
         build_mel_cache(
             df,
             filepath_col=data_cfg["filepath_col"],
@@ -83,7 +83,7 @@ def run_training(
             duration=data_cfg["duration"],
         )
     else:
-        print("[Cache] Using existing cache")
+        print("[Cache] using existing cache")
 
     mel_aug = get_mel_augmentations(
         time_mask_max_length=aug_cfg["time_masking"]["max_length"],
@@ -92,7 +92,7 @@ def run_training(
         freq_mask_max_length=aug_cfg["freq_masking"]["max_length"],
         freq_mask_max_masks=aug_cfg["freq_masking"]["max_masks"],
         freq_mask_p=aug_cfg["freq_masking"]["p"],
-        normalize_standart=aug_cfg["normalization"]["standard"],
+        normalize_standard=aug_cfg["normalization"]["standard"],
         normalize_minmax=aug_cfg["normalization"]["minmax"],
         eps=aug_cfg["normalization"]["eps"],
     )
@@ -112,6 +112,7 @@ def run_training(
         target_col=data_cfg["target_col"],
         label2id=label2id,
         cache_dir=cache_dir,
+        spectrogram_transform=None,
     )
 
     train_loader = DataLoader(
@@ -139,7 +140,6 @@ def run_training(
     )
 
     checkpoint_dir = train_cfg.get("checkpoint_path") or "./checkpoints"
-
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     checkpoint_callback = ModelCheckpoint(
@@ -186,4 +186,3 @@ def run_training(
         wandb.finish()
 
     return model, trainer, checkpoint_callback
-
