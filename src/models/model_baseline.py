@@ -9,13 +9,13 @@ import timm
 class BirdSoundClassifier(pl.LightningModule):
 
     def __init__(
-            self,
-            num_classes: int,
-            backbone_name: str = "efficientnet_b0",
-            pretrained: bool = True,
-            lr: float = 1e-4,
-            loss_fn: nn.Module = None,
-            checkpoint_path: str = None,
+        self,
+        num_classes: int,
+        backbone_name: str = "efficientnet_b0",
+        pretrained: bool = True,
+        lr: float = 1e-4,
+        loss_fn: nn.Module = None,
+        checkpoint_path: str = None,
     ):
         super().__init__()
 
@@ -28,18 +28,19 @@ class BirdSoundClassifier(pl.LightningModule):
             in_chans=1,
         )
 
-
         if checkpoint_path:
             if os.path.exists(checkpoint_path):
                 ckpt = torch.load(checkpoint_path, map_location="cpu")
                 state_dict = ckpt.get("state_dict", ckpt)
+
                 self.model.load_state_dict(state_dict, strict=False)
             else:
-                print(f"Checkpoint not found: {checkpoint_path} - training from scratch")
+                print(f"Checkpoint not found: {checkpoint_path}")
         else:
-            print("No checkpoint provided - training from scratch")
+            print("No checkpoint provided")
 
         self.loss_fn = loss_fn
+        assert self.loss_fn is not None
 
         self.train_auroc = torchmetrics.AUROC(
             task="multilabel",
@@ -59,38 +60,31 @@ class BirdSoundClassifier(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-
         loss = self.loss_fn(logits, y.float())
-
-        self.train_auroc.update(torch.sigmoid(logits), y.long())
-
-        self.log("train_loss", loss, prog_bar=True, on_epoch=True)
+        probs = torch.sigmoid(logits)
+        self.train_auroc.update(probs, y.float())
+        self.log("train_loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
         return loss
 
     def validation_step(self, batch, batch_idx):
         x, y = batch
         logits = self(x)
-
         loss = self.loss_fn(logits, y.float())
-
-        self.val_auroc.update(torch.sigmoid(logits), y.long())
-
-        self.log("val_loss", loss, prog_bar=True, on_epoch=True)
+        probs = torch.sigmoid(logits)
+        self.val_auroc.update(probs, y.float())
+        self.log("val_loss", loss, prog_bar=True, on_epoch=True, sync_dist=True)
         return loss
 
     def on_train_epoch_end(self):
-        self.log("train_auroc", self.train_auroc.compute(), prog_bar=True)
+        self.log("train_auroc", self.train_auroc.compute(), prog_bar=True, sync_dist=True)
         self.train_auroc.reset()
 
     def on_validation_epoch_end(self):
-        self.log("val_auroc", self.val_auroc.compute(), prog_bar=True)
+        self.log("val_auroc", self.val_auroc.compute(), prog_bar=True, sync_dist=True)
         self.val_auroc.reset()
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(
-            self.parameters(),
-            lr=self.hparams.lr
-        )
+        optimizer = torch.optim.AdamW(self.parameters(), lr=self.hparams.lr, weight_decay=1e-4)
 
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,

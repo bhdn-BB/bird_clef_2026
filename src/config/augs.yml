@@ -4,18 +4,19 @@ mel_augmentation:
 
   time_masking:
     enabled: true
-    max_length: 20
-    max_masks: 2
-    p: 0.5
+    max_length: 12
+    max_masks: 1
+    p: 0.25
 
   freq_masking:
     enabled: true
-    max_length: 10
-    max_masks: 2
-    p: 0.5
+    max_length: 8
+    max_masks: 1
+    p: 0.25
 
   normalization:
     enabled: true
-    eps: 1e-6
+    eps: 1e-5
+
     standard: true
     minmax: false
