@@ -48,6 +48,9 @@ def run_training_wave_aug(
 
     df = split_audio_samples(df, max_duration=data_cfg["duration"])
 
+    if train_cfg.get("max_samples") is not None:
+        df = df.sample(n=min(train_cfg["max_samples"], len(df)), random_state=train_cfg["seed"]).reset_index(drop=True)
+
     train_df, val_df = train_test_split(
         df,
         test_size=train_cfg["val_split"],

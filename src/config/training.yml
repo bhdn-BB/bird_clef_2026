@@ -19,6 +19,8 @@ train:
 
   checkpoint_path: null
 
+  max_samples: 100
+
   mel_dim:
     sr: 32000
     n_mels: 128
