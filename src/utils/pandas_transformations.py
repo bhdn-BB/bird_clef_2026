@@ -24,13 +24,12 @@ def get_duration(path: str) -> float:
         return 0.0
 
 
-def merge_dataframes(
+def load_cleaned_df(
         cleaned_df: pd.DataFrame,
-        soundscapes_df: pd.DataFrame,
         cleaned_audio_dir: str,
-        soundscapes_audio_dir: str,
         n_workers: int = 4,
 ) -> pd.DataFrame:
+    cleaned_df = cleaned_df.copy()
     cleaned_df['filepath'] = cleaned_df['filename'].apply(
         lambda path: os.path.join(cleaned_audio_dir, path)
     )
@@ -42,16 +41,26 @@ def merge_dataframes(
         for path in tqdm(cleaned_df['filepath'], desc="Getting durations", unit=" files")
     )
     cleaned_df['end'] = durations
-    cleaned_df = cleaned_df[['primary_label', 'start', 'end', 'filepath']]
+    return cleaned_df[['primary_label', 'start', 'end', 'filepath']]
 
+
+def merge_dataframes(
+        cleaned_df: pd.DataFrame,
+        soundscapes_df: pd.DataFrame,
+        cleaned_audio_dir: str,
+        soundscapes_audio_dir: str,
+        n_workers: int = 4,
+) -> pd.DataFrame:
+    base_df = load_cleaned_df(cleaned_df, cleaned_audio_dir, n_workers=n_workers)
+
+    soundscapes_df = soundscapes_df.copy()
     soundscapes_df['filepath'] = soundscapes_df['filename'].apply(
         lambda path: os.path.join(soundscapes_audio_dir, path)
     )
     soundscapes_df.drop(columns=['filename'], inplace=True)
     soundscapes_df['start'] = pd.to_timedelta(soundscapes_df['start']).dt.total_seconds()
     soundscapes_df['end'] = pd.to_timedelta(soundscapes_df['end']).dt.total_seconds()
-    combined_df = pd.concat([cleaned_df, soundscapes_df], ignore_index=True)
-    return combined_df
+    return pd.concat([base_df, soundscapes_df], ignore_index=True)
 
 
 def split_audio_samples(combined_df: pd.DataFrame, max_duration: float) -> pd.DataFrame:

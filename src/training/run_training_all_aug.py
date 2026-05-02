@@ -11,21 +11,20 @@ from pytorch_lightning.loggers import WandbLogger
 
 from src.data_module.dataset import AudioDataset
 from src.data_module.spectrogram_augmentations import get_mel_augmentations
+from src.data_module.wave_augmentations import get_wave_augmentations
 from src.data_module.wave_features_extractor import WaveFeaturesExtractor
 
 from src.losses.focal import FocalLoss
 from src.models.model_baseline import BirdSoundClassifier
 
 from src.utils.config_loader import load_yaml
-from src.utils.pandas_transformations import get_label2id, merge_dataframes, split_audio_samples
-from src.utils.run_mel_caching import build_mel_cache
+from src.utils.pandas_transformations import get_label2id, load_cleaned_df, split_audio_samples
 
 
-def run_training(
+def run_training_all_aug(
         data_cfg_path: str,
         train_cfg_path: str,
         aug_cfg_path: str,
-        cache_dir: str = None,
         wandb_api_key: str = None,
         wandb_project: str = None,
         wandb_entity: str = None,
@@ -33,24 +32,21 @@ def run_training(
     data_cfg = load_yaml(data_cfg_path)["data"]
     train_cfg = load_yaml(train_cfg_path)["train"]
 
-    # Завантажуємо конфіг і строго витягуємо потрібні блоки
     full_aug_cfg = load_yaml(aug_cfg_path)
     mel_aug_cfg = full_aug_cfg["mel_augmentation"]
-    mixup_cfg = full_aug_cfg["mixup"]  # Якщо блоку mixup немає, отримаємо KeyError
+    wave_aug_cfg = full_aug_cfg["wave_augmentation"]
+    mixup_cfg = full_aug_cfg["mixup"]
 
     pl.seed_everything(train_cfg["seed"], workers=True)
 
     cleaned = pd.read_csv(data_cfg["cleaned_df_path"])
-    sound = pd.read_csv(data_cfg["soundscapes_df_path"])
     tax = pd.read_csv(data_cfg["taxonomy_df_path"])
 
     label2id = get_label2id(tax, data_cfg["target_col"])
 
-    df = merge_dataframes(
+    df = load_cleaned_df(
         cleaned,
-        sound,
         data_cfg["cleaned_audio_dir"],
-        data_cfg["soundscapes_audio_dir"],
         n_workers=train_cfg.get("pandas_n_workers", 4),
     )
 
@@ -73,20 +69,17 @@ def run_training(
         fmax=mel_cfg["freq_max"],
     )
 
-    if cache_dir is None:
-        cache_dir = data_cfg["cache_dir"]
-
-    if not os.path.exists(cache_dir) or len(os.listdir(cache_dir)) == 0:
-        print("[Cache] building...")
-        build_mel_cache(
-            df,
-            filepath_col=data_cfg["filepath_col"],
-            cache_dir=cache_dir,
-            feature_extractor=feature_extractor,
-            duration=data_cfg["duration"],
-        )
-    else:
-        print("[Cache] using existing cache")
+    wave_aug = get_wave_augmentations(
+        gaussian_min_amplitude=wave_aug_cfg["gaussian_noise"]["min_amplitude"],
+        gaussian_max_amplitude=wave_aug_cfg["gaussian_noise"]["max_amplitude"],
+        prob_applying_gaussian_noise=wave_aug_cfg["gaussian_noise"]["p"],
+        pitch_shift_min_semitones=wave_aug_cfg["pitch_shift"]["min_semitones"],
+        pitch_shift_max_semitones=wave_aug_cfg["pitch_shift"]["max_semitones"],
+        prob_applying_pitch_shift=wave_aug_cfg["pitch_shift"]["p"],
+        time_stretch_min_rate=wave_aug_cfg["time_stretch"]["min_rate"],
+        time_stretch_max_rate=wave_aug_cfg["time_stretch"]["max_rate"],
+        prob_applying_time_stretch=wave_aug_cfg["time_stretch"]["p"],
+    )
 
     mel_aug = get_mel_augmentations(
         time_mask_max_length=mel_aug_cfg["time_masking"]["max_length"],
@@ -100,16 +93,22 @@ def run_training(
         eps=float(mel_aug_cfg["normalization"]["eps"]),
     )
 
-    # Строгий доступ до параметрів Mixup
     mixup_p = mixup_cfg["p"] if mixup_cfg["enabled"] else 0.0
     mixup_alpha = mixup_cfg["alpha"]
+
+    h5_dir = data_cfg["h5_dir"]
+    audio_root = data_cfg["audio_root"]
 
     train_ds = AudioDataset(
         df=train_df,
         filepath_col=data_cfg["filepath_col"],
         target_col=data_cfg["target_col"],
         label2id=label2id,
-        cache_dir=cache_dir,
+        h5_dir=h5_dir,
+        audio_root=audio_root,
+        feature_extractor=feature_extractor,
+        duration=data_cfg["duration"],
+        wave_transform=wave_aug,
         spectrogram_transform=mel_aug,
         mixup_p=mixup_p,
         mixup_alpha=mixup_alpha,
@@ -121,7 +120,11 @@ def run_training(
         filepath_col=data_cfg["filepath_col"],
         target_col=data_cfg["target_col"],
         label2id=label2id,
-        cache_dir=cache_dir,
+        h5_dir=h5_dir,
+        audio_root=audio_root,
+        feature_extractor=feature_extractor,
+        duration=data_cfg["duration"],
+        wave_transform=None,
         spectrogram_transform=None,
         mixup_p=0.0,
         is_train=False,
@@ -159,7 +162,7 @@ def run_training(
         monitor="val_auroc",
         mode="max",
         save_top_k=1,
-        filename="best-{epoch}-{val_auroc:.4f}",
+        filename="all_aug-{epoch}-{val_auroc:.4f}",
     )
 
     early_stop = EarlyStopping(
@@ -177,7 +180,7 @@ def run_training(
         wandb_logger = WandbLogger(
             project=wandb_project,
             entity=wandb_entity,
-            name=train_cfg.get("exp_name", "bird_exp"),
+            name=train_cfg.get("exp_name", "all_aug"),
         )
 
     trainer = pl.Trainer(
