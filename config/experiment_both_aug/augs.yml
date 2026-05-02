@@ -12,25 +12,21 @@ mel_augmentation:
     p: 0.25
 
   normalization:
-    enabled: true
-    eps: 1e-05
     standard: true
     minmax: false
-
-mixup:
-  enabled: true
-  p: 0.5
-  alpha: 0.4
+    eps: 1.0e-05
 
 wave_augmentation:
   gaussian_noise:
     min_amplitude: 0.001
     max_amplitude: 0.015
     p: 0.3
+
   pitch_shift:
     min_semitones: -2.0
     max_semitones: 2.0
     p: 0.3
+
   time_stretch:
     min_rate: 0.9
     max_rate: 1.1

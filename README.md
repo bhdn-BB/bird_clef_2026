@@ -5,136 +5,124 @@ Bird sound classification for the BirdCLEF 2026 competition.
 ## Training
 
 ```bash
-python train.py <variant>
+python train.py --config <path/to/experiment.yml> [--accelerator gpu] [--devices 1] [--precision 32]
 ```
 
-Variants: `no_aug`, `mel_aug`, `wave_aug`, `both_aug`, `all_aug`
+`--accelerator`, `--devices`, `--precision` are runtime/hardware options — they are never stored in YAML configs.
 
-Config files are loaded from `src/config/`:
-- `data.yml` — dataset paths and parameters
-- `training.yml` — model and trainer parameters (always used)
-- `augs.yml` — augmentation parameters (used by aug variants)
+### Experiments
 
-Per-variant minimal config snapshots live alongside each script in `src/training/<variant>.yml`.
+```bash
+# No augmentation (offline mel cache)
+python train.py --config config/experiment_no_aug/experiment.yml
+
+# Spectrogram augmentation — SpecAugment (offline mel cache)
+python train.py --config config/experiment_mel_aug/experiment.yml
+
+# Waveform augmentation — noise / pitch / stretch (online mel from HDF5)
+python train.py --config config/experiment_wave_aug/experiment.yml
+
+# Wave + spectrogram augmentation (online mel from HDF5)
+python train.py --config config/experiment_both_aug/experiment.yml
+
+# Wave + spectrogram + Mixup (online mel from HDF5)
+python train.py --config config/experiment_all_aug/experiment.yml
+```
+
+WandB credentials can be passed via CLI options or environment variables:
+```bash
+python train.py --config config/experiment_mel_aug/experiment.yml \
+  --wandb-project birdclef2026 \
+  --wandb-entity my-team \
+  --wandb-api-key <key>
+# or set WANDB_PROJECT / WANDB_ENTITY / WANDB_API_KEY in environment
+```
 
 ---
 
-## Config reference: `src/config/training.yml`
+## Config structure
 
-Each variant reads `training.yml` under the `train:` key. The table below shows which keys are **required** vs **optional** per variant. All five variants currently consume the same set of keys.
+```
+config/
+  global.yml                    # shared across all experiments
+  experiment_no_aug/
+    experiment.yml
+  experiment_mel_aug/
+    experiment.yml
+    augs.yml
+  experiment_wave_aug/
+    experiment.yml
+    augs.yml
+  experiment_both_aug/
+    experiment.yml
+    augs.yml
+  experiment_all_aug/
+    experiment.yml
+    augs.yml
+```
 
-| Key | Type | Required | Notes |
-|-----|------|----------|-------|
-| `backbone_name` | str | yes | timm model name |
-| `lr` | float | yes | |
-| `batch_size_train` | int | yes | |
-| `batch_size_val` | int | yes | |
-| `max_epochs` | int | yes | |
-| `patience` | int | yes | EarlyStopping patience |
-| `seed` | int | yes | |
-| `val_split` | float | yes | fraction of data for validation |
-| `accelerator` | str | yes | `"gpu"` or `"cpu"` |
-| `devices` | int | yes | |
-| `precision` | str | yes | `"16-mixed"`, `"32"`, etc. |
-| `num_workers` | int | yes | DataLoader workers |
-| `mel_dim.sr` | int | yes | sample rate |
-| `mel_dim.n_mels` | int | yes | |
-| `mel_dim.hop_length` | int | yes | |
-| `mel_dim.n_fft` | int | yes | |
-| `mel_dim.freq_min` | float | yes | |
-| `mel_dim.freq_max` | float | yes | |
-| `checkpoint_path` | str\|null | no | resume from checkpoint |
-| `max_samples` | int\|null | no | cap total samples before train/val split (null = all) |
-| `exp_name` | str | no | WandB run name (defaults to variant name) |
-| `pandas_n_workers` | int | no | parallelism for CSV loading (default 4) |
+The variant (no_aug / mel_aug / wave_aug / both_aug / all_aug) is detected automatically based on which augmentation keys are present in `augs.yml`:
 
-> `mel_dim.db_delta` present in the shared config is not consumed by any training script.
+| Keys in `augs.yml` | Variant |
+|---|---|
+| *(no file)* | `no_aug` |
+| `mel_augmentation` only | `mel_aug` |
+| `wave_augmentation` only | `wave_aug` |
+| `mel_augmentation` + `wave_augmentation` | `both_aug` |
+| `mel_augmentation` + `wave_augmentation` + `mixup` | `all_aug` |
 
 ---
 
-## Variant details
+## Config reference
 
-### `no_aug`
+### `config/global.yml`
 
-No augmentation. Builds a mel-spectrogram cache up front and loads from it at train time.
+Shared by all experiments. Do not copy into experiment directories.
 
-**Config files used:** `data.yml`, `training.yml`
+| Key | Description |
+|---|---|
+| `data.cleaned_df_path` | Path to `train.csv` |
+| `data.taxonomy_df_path` | Path to `taxonomy.csv` |
+| `data.cleaned_audio_dir` | Directory with training audio |
+| `data.filepath_col` | Column name for file paths in the CSV |
+| `data.target_col` | Column name for labels |
+| `data.cache_dir` | Mel-spectrogram cache dir (offline pipeline) |
+| `data.h5_dir` | HDF5 waveform cache dir (online pipeline) |
+| `data.audio_root` | Root prefix for audio paths in HDF5 pipeline |
+| `data.sample_rate` | Target sample rate (Hz) |
+| `data.duration` | Clip duration (seconds) |
+| `mel_dim.sr` | Sample rate for mel transform |
+| `mel_dim.n_mels` | Number of mel bins |
+| `mel_dim.hop_length` | STFT hop length |
+| `mel_dim.n_fft` | FFT size |
+| `mel_dim.freq_min` | Minimum frequency (Hz) |
+| `mel_dim.freq_max` | Maximum frequency (Hz) |
+| `mel_dim.db_delta` | top_db for amplitude_to_db |
+| `seed` | Global random seed |
+| `val_split` | Fraction of data held out for validation |
+| `num_workers` | DataLoader workers |
 
-**Minimal `training.yml`:**
+### `experiment.yml`
 
-```yaml
-train:
-  backbone_name: "efficientnet_b0"
-  lr: 0.0001
+Experiment-specific hyperparameters.
 
-  batch_size_train: 128
-  batch_size_val: 64
+| Key | Required | Description |
+|---|---|---|
+| `name` | yes | Run name used for WandB and checkpoint filenames |
+| `backbone_name` | yes | timm model name |
+| `lr` | yes | Learning rate |
+| `batch_size_train` | yes | Training batch size |
+| `batch_size_val` | yes | Validation batch size |
+| `max_epochs` | yes | Maximum training epochs |
+| `patience` | yes | EarlyStopping patience |
+| `max_samples` | no | Cap total samples before split (null = all) |
+| `checkpoint_dir` | no | Directory for saved checkpoints (default `./checkpoints`) |
+| `checkpoint_path` | no | Resume from this checkpoint |
+| `pandas_n_workers` | no | Workers for CSV loading (default 4) |
 
-  max_epochs: 18
-  patience: 5
+### `augs.yml` — `mel_augmentation`
 
-  seed: 42
-  val_split: 0.1
-
-  accelerator: "gpu"
-  devices: 1
-  precision: "32"
-
-  num_workers: 0
-  max_samples: null
-
-  mel_dim:
-    sr: 32000
-    n_mels: 128
-    hop_length: 512
-    n_fft: 2048
-    freq_min: 20
-    freq_max: 8000.0
-```
-
-**Key `data.yml` fields:** `cleaned_df_path`, `taxonomy_df_path`, `cleaned_audio_dir`, `filepath_col`, `target_col`, `duration`, `cache_dir`
-
----
-
-### `mel_aug`
-
-Spectrogram-level augmentation (time masking, frequency masking) applied after the mel cache is loaded.
-
-**Config files used:** `data.yml`, `training.yml`, `augs.yml`
-
-**Minimal `training.yml`:**
-
-```yaml
-train:
-  backbone_name: "efficientnet_b0"
-  lr: 0.0001
-
-  batch_size_train: 128
-  batch_size_val: 64
-
-  max_epochs: 18
-  patience: 5
-
-  seed: 42
-  val_split: 0.1
-
-  accelerator: "gpu"
-  devices: 1
-  precision: "32"
-
-  num_workers: 0
-  max_samples: null
-
-  mel_dim:
-    sr: 32000
-    n_mels: 128
-    hop_length: 512
-    n_fft: 2048
-    freq_min: 20
-    freq_max: 8000.0
-```
-
-**Required `augs.yml` section:** `mel_augmentation`
+Used by `mel_aug`, `both_aug`, `all_aug`.
 
 ```yaml
 mel_augmentation:
@@ -151,50 +139,12 @@ mel_augmentation:
   normalization:
     standard: true
     minmax: false
-    eps: 1e-05
+    eps: 1.0e-05
 ```
 
----
+### `augs.yml` — `wave_augmentation`
 
-### `wave_aug`
-
-Waveform-level augmentation (Gaussian noise, pitch shift, time stretch) applied online from the HDF5 cache.
-
-**Config files used:** `data.yml`, `training.yml`, `augs.yml`
-
-**Minimal `training.yml`:**
-
-```yaml
-train:
-  backbone_name: "efficientnet_b0"
-  lr: 0.0001
-
-  batch_size_train: 128
-  batch_size_val: 64
-
-  max_epochs: 18
-  patience: 5
-
-  seed: 42
-  val_split: 0.1
-
-  accelerator: "gpu"
-  devices: 1
-  precision: "32"
-
-  num_workers: 0
-  max_samples: null
-
-  mel_dim:
-    sr: 32000
-    n_mels: 128
-    hop_length: 512
-    n_fft: 2048
-    freq_min: 20
-    freq_max: 8000.0
-```
-
-**Required `augs.yml` section:** `wave_augmentation`
+Used by `wave_aug`, `both_aug`, `all_aug`.
 
 ```yaml
 wave_augmentation:
@@ -212,93 +162,9 @@ wave_augmentation:
     p: 0.2
 ```
 
-**Key `data.yml` fields:** `h5_dir`, `audio_root` (instead of `cache_dir`)
+### `augs.yml` — `mixup`
 
----
-
-### `both_aug`
-
-Wave + mel augmentation combined. Uses the HDF5 waveform cache (online mel transform).
-
-**Config files used:** `data.yml`, `training.yml`, `augs.yml`
-
-**Minimal `training.yml`:**
-
-```yaml
-train:
-  backbone_name: "efficientnet_b0"
-  lr: 0.0001
-
-  batch_size_train: 128
-  batch_size_val: 64
-
-  max_epochs: 18
-  patience: 5
-
-  seed: 42
-  val_split: 0.1
-
-  accelerator: "gpu"
-  devices: 1
-  precision: "32"
-
-  num_workers: 0
-  max_samples: null
-
-  mel_dim:
-    sr: 32000
-    n_mels: 128
-    hop_length: 512
-    n_fft: 2048
-    freq_min: 20
-    freq_max: 8000.0
-```
-
-**Required `augs.yml` sections:** `mel_augmentation` + `wave_augmentation` (see above)
-
-**Key `data.yml` fields:** `h5_dir`, `audio_root`
-
----
-
-### `all_aug`
-
-Wave + mel augmentation + Mixup. Full augmentation pipeline.
-
-**Config files used:** `data.yml`, `training.yml`, `augs.yml`
-
-**Minimal `training.yml`:**
-
-```yaml
-train:
-  backbone_name: "efficientnet_b0"
-  lr: 0.0001
-
-  batch_size_train: 128
-  batch_size_val: 64
-
-  max_epochs: 18
-  patience: 5
-
-  seed: 42
-  val_split: 0.1
-
-  accelerator: "gpu"
-  devices: 1
-  precision: "32"
-
-  num_workers: 0
-  max_samples: null
-
-  mel_dim:
-    sr: 32000
-    n_mels: 128
-    hop_length: 512
-    n_fft: 2048
-    freq_min: 20
-    freq_max: 8000.0
-```
-
-**Required `augs.yml` sections:** `mel_augmentation` + `wave_augmentation` + `mixup`
+Used by `all_aug` only.
 
 ```yaml
 mixup:
@@ -306,5 +172,3 @@ mixup:
   p: 0.5
   alpha: 0.4
 ```
-
-**Key `data.yml` fields:** `h5_dir`, `audio_root`

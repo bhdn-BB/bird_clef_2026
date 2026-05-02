@@ -1,6 +1,4 @@
-
 data:
-
   cleaned_df_path: "/kaggle/input/competitions/birdclef-2026/train.csv"
   soundscapes_df_path: "/kaggle/input/competitions/birdclef-2026/train_soundscapes_labels.csv"
   taxonomy_df_path: "/kaggle/input/competitions/birdclef-2026/taxonomy.csv"
@@ -12,11 +10,21 @@ data:
   target_col: "primary_label"
 
   cache_dir: "/kaggle/input/datasets/bohdanbb2000/mel-specs-001/mel_caching_dir"
-
   h5_dir: "/kaggle/working/h5_cache"
   audio_root: "/kaggle/input/competitions/birdclef-2026"
 
   sample_rate: 32000
   duration: 3.0
 
-  num_workers: 0
+mel_dim:
+  sr: 32000
+  n_mels: 128
+  hop_length: 512
+  n_fft: 2048
+  freq_min: 20
+  freq_max: 8000.0
+  db_delta: 80
+
+seed: 42
+val_split: 0.1
+num_workers: 0
