@@ -18,6 +18,7 @@ train:
   num_workers: 0
 
   checkpoint_path: null
+  checkpoint_dir: "./checkpoints"
 
   max_samples: 100
 

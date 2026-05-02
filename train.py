@@ -5,7 +5,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATA_CFG = "src/config/data.yml"
-TRAIN_CFG = "src/config/train.yml"
+TRAIN_CFG = "src/config/training.yml"
 AUG_CFG = "src/config/augs.yml"
 
 

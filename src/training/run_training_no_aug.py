@@ -46,15 +46,6 @@ def run_training_no_aug(
 
     df = split_audio_samples(df, max_duration=data_cfg["duration"])
 
-    if train_cfg.get("max_samples") is not None:
-        df = df.sample(n=min(train_cfg["max_samples"], len(df)), random_state=train_cfg["seed"]).reset_index(drop=True)
-
-    train_df, val_df = train_test_split(
-        df,
-        test_size=train_cfg["val_split"],
-        random_state=train_cfg["seed"],
-    )
-
     mel_cfg = train_cfg["mel_dim"]
 
     feature_extractor = WaveFeaturesExtractor(
@@ -64,6 +55,7 @@ def run_training_no_aug(
         n_fft=mel_cfg["n_fft"],
         fmin=mel_cfg["freq_min"],
         fmax=mel_cfg["freq_max"],
+        top_db=mel_cfg.get("db_delta", 80),
     )
 
     if cache_dir is None:
@@ -80,6 +72,15 @@ def run_training_no_aug(
         )
     else:
         print("[Cache] using existing cache")
+
+    if train_cfg.get("max_samples") is not None:
+        df = df.sample(n=min(train_cfg["max_samples"], len(df)), random_state=train_cfg["seed"]).reset_index(drop=True)
+
+    train_df, val_df = train_test_split(
+        df,
+        test_size=train_cfg["val_split"],
+        random_state=train_cfg["seed"],
+    )
 
     train_ds = AudioDataset(
         df=train_df,
@@ -127,7 +128,7 @@ def run_training_no_aug(
         checkpoint_path=train_cfg.get("checkpoint_path"),
     )
 
-    checkpoint_dir = train_cfg.get("checkpoint_path") or "./checkpoints"
+    checkpoint_dir = train_cfg.get("checkpoint_dir", "./checkpoints")
     os.makedirs(checkpoint_dir, exist_ok=True)
 
     checkpoint_callback = ModelCheckpoint(
