@@ -115,7 +115,6 @@ Experiment-specific hyperparameters.
 | `batch_size_val` | yes | Validation batch size |
 | `max_epochs` | yes | Maximum training epochs |
 | `patience` | yes | EarlyStopping patience |
-| `max_samples` | no | Cap total samples before split (null = all) |
 | `checkpoint_dir` | no | Directory for saved checkpoints (default `./checkpoints`) |
 | `checkpoint_path` | no | Resume from this checkpoint |
 | `pandas_n_workers` | no | Workers for CSV loading (default 4) |

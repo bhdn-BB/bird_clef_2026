@@ -13,7 +13,8 @@ from src.training.run_training import run_training
 @click.option("--wandb-project", default=None, envvar="WANDB_PROJECT")
 @click.option("--wandb-entity", default=None, envvar="WANDB_ENTITY")
 @click.option("--wandb-api-key", default=None, envvar="WANDB_API_KEY")
-def train(config, accelerator, devices, precision, cache_dir, wandb_project, wandb_entity, wandb_api_key):
+@click.option("--fast-dev", is_flag=True, default=False, help="Run 1 train+val batch to verify the pipeline end-to-end")
+def train(config, accelerator, devices, precision, cache_dir, wandb_project, wandb_entity, wandb_api_key, fast_dev):
     cfg = load_experiment_config(config)
     run_training(
         cfg=cfg,
@@ -24,6 +25,7 @@ def train(config, accelerator, devices, precision, cache_dir, wandb_project, wan
         wandb_project=wandb_project,
         wandb_entity=wandb_entity,
         wandb_api_key=wandb_api_key,
+        fast_dev=fast_dev,
     )
 
 

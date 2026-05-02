@@ -9,7 +9,7 @@ data:
   filepath_col: "filepath"
   target_col: "primary_label"
 
-  cache_dir: "/kaggle/input/datasets/bohdanbb2000/mel-specs-001/mel_caching_dir"
+  cache_dir: "/kaggle/working/datasets/bohdanbb2000/mel-specs-001/mel_caching_dir"
   h5_dir: "/kaggle/working/h5_cache"
   audio_root: "/kaggle/input/competitions/birdclef-2026"
 
@@ -27,4 +27,4 @@ mel_dim:
 
 seed: 42
 val_split: 0.1
-num_workers: 0
+num_workers: 4

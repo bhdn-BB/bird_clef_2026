@@ -30,6 +30,7 @@ def run_training(
         wandb_project: str = None,
         wandb_entity: str = None,
         wandb_api_key: str = None,
+        fast_dev: bool = False,
 ):
     data_cfg = cfg["data"]
     mel_dim = cfg["mel_dim"]
@@ -56,10 +57,8 @@ def run_training(
     )
     df = split_audio_samples(df, max_duration=data_cfg["duration"])
 
-    if exp_cfg.get("max_samples") is not None:
-        df = df.sample(
-            n=min(exp_cfg["max_samples"], len(df)), random_state=seed
-        ).reset_index(drop=True)
+    if fast_dev:
+        df = df.head(2 * exp_cfg["batch_size_train"])
 
     train_df, val_df = train_test_split(df, test_size=val_split, random_state=seed)
 
@@ -116,7 +115,8 @@ def run_training(
         if cache_dir is None:
             cache_dir = data_cfg["cache_dir"]
 
-        if not os.path.exists(cache_dir) or len(os.listdir(cache_dir)) == 0:
+        cached_count = len(os.listdir(cache_dir)) if os.path.exists(cache_dir) else 0
+        if cached_count < len(df):
             print("[Cache] building...")
             build_mel_cache(
                 df,
@@ -245,6 +245,7 @@ def run_training(
         log_every_n_steps=10,
         deterministic=True,
         num_sanity_val_steps=0,
+        fast_dev_run=fast_dev,
     )
 
     trainer.fit(model, train_loader, val_loader)
