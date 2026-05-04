@@ -19,7 +19,7 @@ def build_mel_cache(
 
         filepath = row[filepath_col]
         start_sec = float(row.get("start", 0.0))
-        cache_filename = f"{os.path.basename(filepath)}_{start_sec:.4f}.pt"
+        cache_filename = f"{os.path.basename(filepath)}_{start_sec:.2f}.pt"
         cache_path = os.path.join(cache_dir, cache_filename)
 
         if os.path.exists(cache_path):

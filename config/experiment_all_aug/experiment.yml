@@ -1,0 +1,12 @@
+name: "all_aug"
+
+backbone_name: "efficientnet_b0"
+lr: 0.0001
+
+batch_size_train: 128
+batch_size_val: 64
+
+max_epochs: 18
+patience: 5
+
+checkpoint_dir: "./checkpoints"

@@ -12,12 +12,6 @@ mel_augmentation:
     p: 0.25
 
   normalization:
-    enabled: true
-    eps: 1e-05
     standard: true
     minmax: false
-
-mixup:
-  enabled: true
-  p: 0.5
-  alpha: 0.4
+    eps: 1.0e-05

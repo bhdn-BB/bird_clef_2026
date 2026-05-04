@@ -1,0 +1,33 @@
+mel_augmentation:
+  time_masking:
+    enabled: true
+    max_length: 12
+    max_masks: 1
+    p: 0.25
+
+  freq_masking:
+    enabled: true
+    max_length: 8
+    max_masks: 1
+    p: 0.25
+
+  normalization:
+    standard: true
+    minmax: false
+    eps: 1.0e-05
+
+wave_augmentation:
+  gaussian_noise:
+    min_amplitude: 0.001
+    max_amplitude: 0.015
+    p: 0.3
+
+  pitch_shift:
+    min_semitones: -2.0
+    max_semitones: 2.0
+    p: 0.3
+
+  time_stretch:
+    min_rate: 0.9
+    max_rate: 1.1
+    p: 0.2
