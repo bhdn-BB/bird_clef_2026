@@ -10,3 +10,22 @@ max_epochs: 18
 patience: 5
 
 checkpoint_dir: "./checkpoints"
+
+augs:
+  mel_augmentation:
+    time_masking:
+      enabled: true
+      max_length: 12
+      max_masks: 1
+      p: 0.25
+
+    freq_masking:
+      enabled: true
+      max_length: 8
+      max_masks: 1
+      p: 0.25
+
+    normalization:
+      standard: true
+      minmax: false
+      eps: 1.0e-05
