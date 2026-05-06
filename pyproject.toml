@@ -1,0 +1,31 @@
+[project]
+name = "bird-clef-20261"
+version = "0.1.0"
+description = ""
+authors = [
+    {name = "Your Name",email = "you@example.com"}
+]
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "h5py (==3.12.1)",
+    "joblib (==1.4.2)",
+    "librosa (==0.11.0)",
+    "pandas (==2.3.3)",
+    "pytorch-lightning (==2.6.0)",
+    "pyyaml (==6.0.2)",
+    "scikit-learn (==1.6.1)",
+    "timm (==1.0.26)",
+    "torch (==2.7.1)",
+    "torchaudio (==2.7.1)",
+    "torchmetrics (==1.8.2)",
+    "torchvision (==0.22.1)",
+    "tqdm (==4.67.1)",
+    "wandb (==0.25.1)",
+    "python-dotenv (==1.1.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
