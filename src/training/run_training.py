@@ -5,7 +5,7 @@ import pytorch_lightning as pl
 import pandas as pd
 import wandb
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from sklearn.model_selection import train_test_split
 
 from pytorch_lightning.callbacks import ModelCheckpoint, EarlyStopping
@@ -52,6 +52,8 @@ def run_training(
     has_wave = augs is not None and "wave_augmentation" in augs
     has_mel = augs is not None and "mel_augmentation" in augs
     has_mixup = augs is not None and "mixup" in augs
+
+    use_sampler = data_cfg.get("sampler", {}).get("enabled", False)
 
     pl.seed_everything(seed, workers=True)
 
@@ -129,7 +131,6 @@ def run_training(
         mixup_p = mixup_cfg["p"] if mixup_cfg["enabled"] else 0.0
         mixup_alpha = mixup_cfg["alpha"]
 
-
     use_wave = has_wave
 
     if not use_wave:
@@ -148,7 +149,7 @@ def run_training(
                 duration=data_cfg["duration"],
             )
         else:
-            print(f"[Mel Cache] using existing cache")
+            print("[Mel Cache] using existing cache")
 
         train_ds = AudioDataset(
             df=train_df,
@@ -224,10 +225,31 @@ def run_training(
             is_train=False,
         )
 
+    sampler = None
+
+    if use_sampler:
+        class_counts = train_df[data_cfg["target_col"]].value_counts().to_dict()
+
+        weights = [
+            1.0 / class_counts[label]
+            for label in train_df[data_cfg["target_col"]]
+        ]
+
+        sampler = WeightedRandomSampler(
+            weights=weights,
+            num_samples=len(weights),
+            replacement=True,
+        )
+
+        print("[Sampler] ENABLED")
+    else:
+        print("[Sampler] disabled")
+
     train_loader = DataLoader(
         train_ds,
         batch_size=exp_cfg["batch_size_train"],
-        shuffle=True,
+        shuffle=(sampler is None),
+        sampler=sampler,
         num_workers=num_workers,
         pin_memory=True,
     )

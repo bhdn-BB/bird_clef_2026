@@ -16,6 +16,9 @@ data:
   sample_rate: 32000
   duration: 3.0
 
+  sampler:
+    enabled: true
+
 mel_dim:
   sr: 32000
   n_mels: 128
